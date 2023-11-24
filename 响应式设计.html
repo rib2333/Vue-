@@ -8,8 +8,9 @@
 </head>
 <body>
     <script>
-let data = {text:'hello lzl',ok:true}
+let data = {foo:true, bar:true}
 let activeEffect
+const effectStack = []
 const bucket = new WeakMap()
 function track(target,key){
     console.log(`收集${key}`,activeEffect)
@@ -54,7 +55,10 @@ function effect(fn){
     const effectFn = ()=>{
         cleanUp(effectFn)
         activeEffect = effectFn;
+        effectStack.push(effectFn)
         fn();
+        effectStack.pop();
+        activeEffect = effectStack[effectStack.length - 1]
     }
     effectFn.deps = []
     effectFn()
@@ -66,10 +70,17 @@ function cleanUp(effectFn){
     }
     effectFn.deps.length = 0;
 }
-effect(()=>{
-    document.body.innerText = obj.ok ? obj.text : 'hello not';
-    console.log('effect run')
-});
+let temp1, temp2
+effect(
+    function effectFn1(){
+        console.log('effectFn1 执行')
+    effect(function effectFn2(){
+        console.log('effectFn2 执行')
+        temp2 = obj.bar;
+    })
+    temp1 = obj.foo
+}
+);
  </script>
 </body>
 </html>
