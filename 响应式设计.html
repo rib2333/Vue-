@@ -8,10 +8,13 @@
 </head>
 <body>
     <script>
-let data = {foo:true, bar:true}
+let data = {foo:1, bar:true}
 let activeEffect
 const effectStack = []
 const bucket = new WeakMap()
+const jobQueue = new Set();
+const p = Promise.resolve()
+let isFlushing = false;
 function track(target,key){
     console.log(`收集${key}`,activeEffect)
     if(!activeEffect){
@@ -32,17 +35,23 @@ function track(target,key){
     activeEffect.deps.push(deps)
 }
 function trigger(target, key){
-    console.log(`激活${key}`)
+    console.log(`激活${key}`,activeEffect)
     let depsMap = bucket.get(target)
     if(!depsMap) return ;
     let effects = depsMap.get(key)
     const effectToRun = new Set()
-    effect && effect.forEach((effectFn)=>{
+    effects && effects.forEach((effectFn)=>{
         if(effectFn !== activeEffect){
             effectToRun.add(effectFn)
         }
     })
-    effectToRun.forEach(effectFn => effectFn())
+    effectToRun.forEach(effectFn => {
+        if(effectFn.options.scheduler){
+            effectFn.options.scheduler(effectFn)
+        }else{
+            effectFn()
+        }
+    })
 }
 
 let obj = new Proxy(data,{
@@ -55,7 +64,7 @@ let obj = new Proxy(data,{
         trigger(target,key)
     }
 })
-function effect(fn){
+function effect(fn, options = {}){
     const effectFn = ()=>{
         cleanUp(effectFn)
         activeEffect = effectFn;
@@ -64,6 +73,7 @@ function effect(fn){
         effectStack.pop();
         activeEffect = effectStack[effectStack.length - 1]
     }
+    effectFn.options = options
     effectFn.deps = []
     effectFn()
 }
@@ -74,17 +84,26 @@ function cleanUp(effectFn){
     }
     effectFn.deps.length = 0;
 }
-let temp1, temp2
-effect(
-    function effectFn1(){
-        console.log('effectFn1 执行')
-    effect(function effectFn2(){
-        console.log('effectFn2 执行')
-        temp2 = obj.bar;
+function flushJob(){
+    if(isFlushing) return ;
+    isFlushing = true;
+    p.then(()=>{
+        jobQueue.forEach(job=>job())
+    }).finally(()=>{
+        isFlushing = false;
     })
-    temp1 = obj.foo
+}
+effect(()=>{
+    console.log(obj.foo)
+},{
+    scheduler(fn){
+        jobQueue.add(fn) //去重
+        flushJob(); //在一个事件循环执行函数。内刷新队列
+    }
 }
 );
+obj.foo++; 
+obj.foo++; //等价于obj.foo = obj.foo +1
  </script>
 </body>
 </html>
