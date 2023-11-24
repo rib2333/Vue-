@@ -12,7 +12,7 @@ let data = {text:'hello lzl',ok:true}
 let activeEffect
 const bucket = new WeakMap()
 function track(target,key){
-    console.log(`收集${key}`)
+    console.log(`收集${key}`,activeEffect)
     if(!activeEffect){
         return target[key]
     }
@@ -28,13 +28,16 @@ function track(target,key){
     }
     //deps是依赖集合，存的副作用函数
     deps.add(activeEffect)
+    activeEffect.deps.push(deps)
 }
 function trigger(target, key){
     console.log(`激活${key}`)
     let depsMap = bucket.get(target)
     if(!depsMap) return ;
     let effects = depsMap.get(key)
-    effects && effects.forEach(fn => fn())
+    const effectToRun = new Set(effects)
+    console.log('effects',effects)
+    effectToRun.forEach(effectFn => effectFn())
 }
 
 let obj = new Proxy(data,{
@@ -48,8 +51,20 @@ let obj = new Proxy(data,{
     }
 })
 function effect(fn){
-    activeEffect = fn;
-    fn()
+    const effectFn = ()=>{
+        cleanUp(effectFn)
+        activeEffect = effectFn;
+        fn();
+    }
+    effectFn.deps = []
+    effectFn()
+}
+function cleanUp(effectFn){
+    for(let i = 0; i < effectFn.deps.length; i++){
+        const deps = effectFn.deps[i];
+        deps.delete(effectFn)
+    }
+    effectFn.deps.length = 0;
 }
 effect(()=>{
     document.body.innerText = obj.ok ? obj.text : 'hello not';
