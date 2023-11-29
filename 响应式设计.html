@@ -8,7 +8,7 @@
 </head>
 <body>
     <script>
-let data = {foo:1, bar:true}
+let data = {foo:1, bar:2}
 let activeEffect
 const effectStack = []
 const bucket = new WeakMap()
@@ -69,13 +69,17 @@ function effect(fn, options = {}){
         cleanUp(effectFn)
         activeEffect = effectFn;
         effectStack.push(effectFn)
-        fn();
+        const res = fn();
         effectStack.pop();
         activeEffect = effectStack[effectStack.length - 1]
+        return res;
     }
     effectFn.options = options
     effectFn.deps = []
-    effectFn()
+    if(!options.lazy){
+        effectFn()
+    }
+    return effectFn
 }
 function cleanUp(effectFn){
     for(let i = 0; i < effectFn.deps.length; i++){
@@ -93,17 +97,37 @@ function flushJob(){
         isFlushing = false;
     })
 }
-effect(()=>{
-    console.log(obj.foo)
-},{
-    scheduler(fn){
-        jobQueue.add(fn) //去重
-        flushJob(); //在一个事件循环执行函数。内刷新队列
+function computed(getters){
+    let value
+    let dirty = true;//脏数据，需要重新计算
+    const effectFn = effect(getters,{
+        lazy:true,
+        scheduler(){
+            if(!dirty){
+                dirty = true;
+                trigger(obj, 'value')
+            }
+        }
+    })
+    const obj = {
+        get value(){
+            if(dirty){
+                value = effectFn()
+                dirty = false;
+            }
+            track(obj, 'value')
+            return value;
+        }
     }
+    return obj;
 }
-);
-obj.foo++; 
-obj.foo++; //等价于obj.foo = obj.foo +1
+const sumRes = computed(()=>{
+    return obj.foo + obj.bar
+})
+effect(()=>{
+    console.log(sumRes.value)
+})
+obj.foo++;
  </script>
 </body>
 </html>
