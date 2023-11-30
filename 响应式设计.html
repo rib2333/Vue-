@@ -121,11 +121,40 @@ function computed(getters){
     }
     return obj;
 }
+function traverse(value, seen = new Set()){
+    if(typeof value !== 'object' || value === null || seen.has(value)) return;
+    seen.add(value);
+    for(const key in value){
+        traverse(value[key], seen)
+    }
+    return value;
+}
+function watch(source, cb){
+    // 判断是不是getter函数
+    let getter;
+    let oldValue, newValue
+    if(typeof source ==='function'){
+        getter = source;
+    }else{
+        getter = ()=> traverse(source)
+    }
+    const effectFn = effect(()=>{
+        return getter()
+    },{
+        lazy:true,
+        scheduler(){
+            newValue = effectFn();
+            cb(newValue, oldValue)
+            oldValue = newValue;
+        }
+    })
+    oldValue = effectFn()
+}
 const sumRes = computed(()=>{
     return obj.foo + obj.bar
 })
-effect(()=>{
-    console.log(sumRes.value)
+watch(()=>obj.foo, (newValue, oldValue)=>{
+    console.log(`${oldValue}变化为${newValue}`)
 })
 obj.foo++;
  </script>
