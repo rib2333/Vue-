@@ -138,17 +138,30 @@ function watch(source, cb){
     }else{
         getter = ()=> traverse(source)
     }
+    const job = ()=>{
+        newValue = effectFn();
+        cb(newValue, oldValue)
+        oldValue = newValue;
+    }
     const effectFn = effect(()=>{
         return getter()
     },{
         lazy:true,
-        scheduler(){
-            newValue = effectFn();
-            cb(newValue, oldValue)
-            oldValue = newValue;
+        scheduler:()=>{
+            if(options.flush === 'post'){
+                const p = Promise.resolve()
+                // 放在微任务队列中，异步延迟执行
+                p.then(job)
+            }else{
+                job()
+            }
         }
     })
-    oldValue = effectFn()
+    if(options.immediate){
+        job()
+    }else{
+        oldValue = effectFn()
+    }
 }
 const sumRes = computed(()=>{
     return obj.foo + obj.bar
