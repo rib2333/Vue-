@@ -129,7 +129,7 @@ function traverse(value, seen = new Set()){
     }
     return value;
 }
-function watch(source, cb){
+function watch(source, cb, options = {}){
     // 判断是不是getter函数
     let getter;
     let oldValue, newValue
@@ -138,9 +138,17 @@ function watch(source, cb){
     }else{
         getter = ()=> traverse(source)
     }
+    let cleanUp
+    function onInvalidate(fn){
+        cleanUp = fn;
+    }
     const job = ()=>{
         newValue = effectFn();
-        cb(newValue, oldValue)
+        if(cleanUp){
+            // 执行之前注册的回调函数
+            cleanUp()
+        }
+        cb(newValue, oldValue, onInvalidate)
         oldValue = newValue;
     }
     const effectFn = effect(()=>{
@@ -166,7 +174,7 @@ function watch(source, cb){
 const sumRes = computed(()=>{
     return obj.foo + obj.bar
 })
-watch(()=>obj.foo, (newValue, oldValue)=>{
+watch(obj, (newValue, oldValue)=>{
     console.log(`${oldValue}变化为${newValue}`)
 })
 obj.foo++;
