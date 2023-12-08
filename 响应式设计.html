@@ -15,8 +15,14 @@ const bucket = new WeakMap()
 const jobQueue = new Set();
 const p = Promise.resolve()
 let isFlushing = false;
+const ITERATE_KEY = Symbol()
+const TriggerType = {
+    SET : 'SET',
+    ADD : 'ADD',
+    DELETE : 'DELETE'
+}
 function track(target,key){
-    console.log(`收集${key}`,activeEffect)
+    console.log(`收集`,activeEffect)
     if(!activeEffect){
         return target[key]
     }
@@ -34,12 +40,21 @@ function track(target,key){
     deps.add(activeEffect)
     activeEffect.deps.push(deps)
 }
-function trigger(target, key){
+function trigger(target, key, type){
     console.log(`激活${key}`,activeEffect)
     let depsMap = bucket.get(target)
     if(!depsMap) return ;
     let effects = depsMap.get(key)
     const effectToRun = new Set()
+    if(type === TriggerType.ADD || type === TriggerType.DELETE){
+        const iterateEffects = depsMap.get(ITERATE_KEY);
+        iterateEffects && iterateEffects.forEach((effectFn)=>{
+        if(effectFn !== activeEffect){
+            effectToRun.add(effectFn)
+        }
+    })
+    }
+
     effects && effects.forEach((effectFn)=>{
         if(effectFn !== activeEffect){
             effectToRun.add(effectFn)
@@ -55,13 +70,30 @@ function trigger(target, key){
 }
 
 let obj = new Proxy(data,{
-    get(target,key){
-        track(target,key)
-        return target[key]
+    ownKeys(target){
+        track(target, ITERATE_KEY)
+        return Reflect.ownKeys(target)
     },
-    set(target, key, val){
-        target[key] = val;
-        trigger(target,key)
+    has(target, key){
+        track(target, key)
+        return Reflect.has(target, key)
+    },
+    get(target,key,receiver){
+        track(target,key)
+        return Reflect.get(target, key, receiver)
+    },
+    set(target, key, newVal, receiver){
+        const type = Object.prototype.hasOwnProperty.call(target, key) ? TriggerType.SET : TriggerType.ADD
+        const res = Reflect.set(target, key, newVal, receiver)
+        trigger(target,key,type)
+        return res;
+    },
+    deleteProperty(target, key){
+        const hadKey = Object.prototype.hasOwnProperty.call(target, key)
+        const res = Reflect.deleteProperty(target, key);
+        if(res && hadKey){
+            trigger(target, key, TriggerType.DELETE)
+        }
     }
 })
 function effect(fn, options = {}){
@@ -171,13 +203,12 @@ function watch(source, cb, options = {}){
         oldValue = effectFn()
     }
 }
-const sumRes = computed(()=>{
-    return obj.foo + obj.bar
+effect(()=>{
+    for(const key in obj){
+        console.log(key)
+    }
 })
-watch(obj, (newValue, oldValue)=>{
-    console.log(`${oldValue}变化为${newValue}`)
-})
-obj.foo++;
+obj.foo = 222
  </script>
 </body>
 </html>
