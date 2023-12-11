@@ -68,6 +68,12 @@ function trigger(target, key, type){
     })
 }
 function reactive(obj){
+    return createReactive(obj)
+}
+function shalloRreactive(obj){
+    return createReactive(obj, true)
+}
+function createReactive(obj, isShallow = false){
 let proxy = new Proxy(obj,{
     ownKeys(target){
         track(target, ITERATE_KEY)
@@ -82,7 +88,14 @@ let proxy = new Proxy(obj,{
             return target
         }
         track(target,key)
-        return Reflect.get(target, key, receiver)
+        const res = Reflect.get(target, key, receiver)
+        if(isShallow){
+            return res;
+        }
+        if(typeof res === 'object' && res !== null){
+            return createReactive(res)
+        }
+        return res
     },
     set(target, key, newVal, receiver){
         //target是原始对象的obj,receiver是代理对象
@@ -214,15 +227,11 @@ function watch(source, cb, options = {}){
     }
 }
 
-const obj = {}
-const proto = {bar : 1}
-const child = reactive(obj)
-const parent = reactive(proto)
-Object.setPrototypeOf(child, parent)
+const obj = shalloRreactive({foo : {bar:1}})
 effect(()=>{
-    console.log(child.bar)
+    console.log(obj.foo.bar)
 })
-child.bar = 2
+obj.foo = {bar:2}
  </script>
 </body>
 </html>
