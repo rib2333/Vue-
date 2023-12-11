@@ -8,7 +8,6 @@
 </head>
 <body>
     <script>
-let data = {foo:1, bar:2}
 let activeEffect
 const effectStack = []
 const bucket = new WeakMap()
@@ -22,7 +21,7 @@ const TriggerType = {
     DELETE : 'DELETE'
 }
 function track(target,key){
-    console.log(`收集`,activeEffect)
+    console.log(`收集${key}`,activeEffect)
     if(!activeEffect){
         return target[key]
     }
@@ -68,8 +67,8 @@ function trigger(target, key, type){
         }
     })
 }
-
-let obj = new Proxy(data,{
+function reactive(obj){
+let proxy = new Proxy(obj,{
     ownKeys(target){
         track(target, ITERATE_KEY)
         return Reflect.ownKeys(target)
@@ -79,13 +78,22 @@ let obj = new Proxy(data,{
         return Reflect.has(target, key)
     },
     get(target,key,receiver){
+        if(key === 'raw'){
+            return target
+        }
         track(target,key)
         return Reflect.get(target, key, receiver)
     },
     set(target, key, newVal, receiver){
+        //target是原始对象的obj,receiver是代理对象
+        const oldVal = target[key]
         const type = Object.prototype.hasOwnProperty.call(target, key) ? TriggerType.SET : TriggerType.ADD
         const res = Reflect.set(target, key, newVal, receiver)
-        trigger(target,key,type)
+        if(target === receiver.raw){
+            if(oldVal !== newVal  && (oldVal === oldVal || newVal === newVal)){
+            trigger(target,key,type)
+        }
+        }
         return res;
     },
     deleteProperty(target, key){
@@ -96,6 +104,8 @@ let obj = new Proxy(data,{
         }
     }
 })
+return proxy;
+}
 function effect(fn, options = {}){
     const effectFn = ()=>{
         cleanUp(effectFn)
@@ -203,12 +213,16 @@ function watch(source, cb, options = {}){
         oldValue = effectFn()
     }
 }
+
+const obj = {}
+const proto = {bar : 1}
+const child = reactive(obj)
+const parent = reactive(proto)
+Object.setPrototypeOf(child, parent)
 effect(()=>{
-    for(const key in obj){
-        console.log(key)
-    }
+    console.log(child.bar)
 })
-obj.foo = 222
+child.bar = 2
  </script>
 </body>
 </html>
